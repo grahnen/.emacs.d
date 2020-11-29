@@ -1,6 +1,9 @@
 #+TITLE: Emacs Configuration
 #+AUTHOR: Samuel Grahn
 #+PROPERTY: header-args :tangle config.el
+
+This is my literate emacs config. Just do a =org-babel-tangle= (=C-c C-v C-t= by default), and everything will be just fine!
+
 * Initialization
 :PROPERTIES:
 :header-args: :tangle init.el
