@@ -1,0 +1,821 @@
+#+TITLE: Emacs Configuration
+#+AUTHOR: Samuel Grahn
+#+PROPERTY: header-args :tangle config.el
+* Initialization
+:PROPERTIES:
+:header-args: :tangle init.el
+:END:
+In order to effectively separate configuration from initialization, we tangle the initialization code to =init.el=, and the config to =config.el=, which is loaded from =init.el=.
+#+begin_src emacs-lisp
+  ;; -*- no-byte-compile: t -*-
+  (setq gc-cons-threshold most-positive-fixnum
+	load-prefer-newer t
+	comp-deferred-compilation t
+	custom-file "~/.emacs.d/custom.el")
+#+end_src
+
+** Package Management
+*** Straight.el
+   #+BEGIN_SRC emacs-lisp
+     (defvar bootstrap-version)
+     (let ((bootstrap-file
+            (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
+           (bootstrap-version 5))
+       (unless (file-exists-p bootstrap-file)
+         (with-current-buffer
+             (url-retrieve-synchronously
+              "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
+              'silent 'inhibit-cookies)
+           (goto-char (point-max))
+           (eval-print-last-sexp)))
+       (load bootstrap-file nil 'nomessage))
+   #+END_SRC
+Method of checking for modifications
+#+begin_src emacs-lisp :tangle yes
+  (if (and (executable-find "watchexec")
+           (executable-find "python3"))
+      (setq straight-check-for-modifications '(watch-files find-when-checking))
+    (setq straight-check-for-modifications '(find-at-startup find-when-checking)))
+#+end_src
+*** Use-Package
+Setup use-package using straight
+#+BEGIN_SRC emacs-lisp
+(straight-use-package 'use-package)
+#+END_SRC
+- Use straight by default
+  #+BEGIN_SRC emacs-lisp
+  (setq straight-use-package-by-default t)
+  #+END_SRC
+** Configuration
+  #+BEGIN_SRC emacs-lisp
+    (load-file (concat user-emacs-directory "functions.el"))
+    (load-file (concat user-emacs-directory "config.el"))
+  #+END_SRC
+** Cleanup
+#+BEGIN_SRC emacs-lisp
+(setq gc-cons-threshold (* 2 1000 1000))
+#+END_SRC
+
+* Miscellaneous
+** Path from Shell
+#+begin_src emacs-lisp :tangle yes :noweb yes
+    (use-package exec-path-from-shell
+      :config
+      (when (memq window-system '(mac ns x))
+        (exec-path-from-shell-initialize))
+      <<exec-path-init>>)
+#+end_src
+** Settings
+- ~C-k~ remove whole line when at beginning of line
+#+BEGIN_SRC emacs-lisp
+  (customize-set-variable 'kill-whole-line t)
+#+END_SRC
+- Easier responses
+#+BEGIN_SRC emacs-lisp
+  (defalias 'yes-or-no-p 'y-or-n-p)
+#+END_SRC
+- Case-insensitive completion
+#+BEGIN_SRC emacs-lisp
+  (setq completion-ignore-case t)
+  (customize-set-variable 'read-file-name-completion-ignore-case t)
+  (customize-set-variable 'read-buffer-completion-ignore-case t)
+#+END_SRC
+
+- Highlight trailing white spaces
+#+BEGIN_SRC emacs-lisp
+  (customize-set-variable 'show-trailing-whitespace t)
+#+END_SRC
+
+- Highlight matching parentheses
+#+BEGIN_SRC emacs-lisp
+  (show-paren-mode)
+#+END_SRC
+- Emacs temp-dir
+#+BEGIN_SRC emacs-lisp
+  (setq user-temporary-file-directory
+    (expand-file-name "~/.emacs.d/tmp/"))
+
+  (make-directory user-temporary-file-directory t)
+#+END_SRC
+
+- Better placements of backups
+#+BEGIN_SRC emacs-lisp
+  (setq backup-directory-alist
+        `(("." . ,(concat user-temporary-file-directory "backups"))))
+#+END_SRC
+- And autosaves
+#+BEGIN_SRC emacs-lisp
+  (setq auto-save-file-name-transforms
+        `((".*" ,(concat user-temporary-file-directory "autosaves") t)))
+#+END_SRC
+
+- We don't do simultaneous editing, and the lockfiles clog my directories
+#+begin_src emacs-lisp :tangle yes
+(setq create-lockfiles nil)
+#+end_src
+
+- Delete trailing whitespace before saving
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'before-save-hook 'delete-trailing-whitespace)
+#+END_SRC
+- ~ESC~ => ~C-g~
+#+BEGIN_SRC emacs-lisp
+(define-key key-translation-map (kbd "ESC") (kbd "C-g"))
+#+END_SRC
+- Visual line-mode
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'text-mode-hook (lambda () (visual-line-mode t)))
+#+END_SRC
+
+- Menu's and Toolbars
+  #+BEGIN_SRC emacs-lisp
+    (tool-bar-mode -1)
+    (scroll-bar-mode -1)
+    (menu-bar-mode -1)
+    (blink-cursor-mode -1)
+    (global-hl-line-mode t)
+  #+END_SRC
+** Default variables
+#+BEGIN_SRC emacs-lisp :noweb yes
+  (setq
+   <<default-variables>>
+   )
+#+END_SRC
+
+  - Auto revert
+    #+BEGIN_SRC emacs-lisp :noweb-ref default-variables
+      global-auto-revert-mode 1
+      global-auto-revert-non-file-buffers t
+      global-auto-revert-buffers t
+      auto-revert-verbose nil
+    #+END_SRC
+  - Skip startup message
+    #+BEGIN_SRC emacs-lisp :noweb-ref default-variables
+    inhibit-startup-message t
+    #+END_SRC
+  - Save Place
+    #+BEGIN_SRC emacs-lisp :noweb-ref default-variables
+    save-place-mode t
+    #+END_SRC
+  - Delete selection when typing over it
+   #+BEGIN_SRC emacs-lisp :noweb-ref default-variables p
+   delete-selection-mode t
+   #+END_SRC
+** Undo-Tree
+#+BEGIN_SRC emacs-lisp
+  (use-package undo-tree
+    :config (global-undo-tree-mode)
+    :bind
+    ("C-z" . undo-tree-undo)
+    ("C-<" . undo-tree-redo)
+    ("C-c z" . undo-tree-visualize))
+#+END_SRC
+
+** Hydra
+#+begin_src emacs-lisp :tangle yes
+  (use-package hydra
+    :config
+    (defhydra hydra-zoom ()
+      "zoom"
+      ("+" text-scale-increase "in")
+      ("-" text-scale-decrease "out")
+      ("0" (text-scale-set 0) "reset")))
+#+end_src
+** Navigation
+*** Ace
+#+begin_src emacs-lisp :tangle yes
+    (use-package ace-window
+      :config
+      (setq aw-keys '(?a ?s ?d ?f ?g ?h ?j ?k ?l)
+            aw-dispatch-always t)
+      :bind
+      ("C-ä" . ace-window))
+#+end_src
+*** Avy
+#+begin_src emacs-lisp
+  (use-package avy
+    :bind
+    ("C-ö" . avy-goto-char-2))
+#+end_src
+** Search-and-replace
+ #+BEGIN_SRC emacs-lisp
+    (use-package pcre2el)
+    (use-package visual-regexp-steroids
+      :after pcre2el
+      :bind
+      ("C-r" . vr/replace)
+      ("C-c r" . vr/query-replace)
+      :config
+      (require 'visual-regexp-steroids)
+      )
+ #+END_SRC
+** Magit
+#+BEGIN_SRC emacs-lisp
+  (use-package magit
+    :bind
+    ("C-x g" . 'magit-status))
+#+END_SRC
+* Dired
+#+begin_src emacs-lisp
+  (setq dired-listing-switches "-aBh --group-directories-first")
+#+end_src
+** Subtree
+#+BEGIN_SRC emacs-lisp
+  (use-package dired-subtree
+    :bind (
+           :map dired-mode-map
+           ("<tab>" . 'dired-subtree-toggle)))
+#+END_SRC
+** Filter
+#+BEGIN_SRC emacs-lisp  :noweb yes
+  (use-package dired-filter
+    :bind (
+           :map dired-mode-map
+           <<dired-filter-bindings>>
+           )
+    :custom
+    <<dired-filter-custom>>
+    )
+#+END_SRC
+- Toggle Filter
+  #+BEGIN_SRC emacs-lisp :tangle no :noweb-ref dired-filter-bindings
+  ("§" . 'dired-filter-mode)
+  #+END_SRC
+- Change filters
+  #+BEGIN_SRC emacs-lisp :tangle no :noweb-ref dired-filter-bindings
+  ("'" . 'dired-filter-map)
+  #+END_SRC
+- Filter Groups
+#+BEGIN_SRC emacs-lisp :tangle no :noweb-ref dired-filter-bindings
+  ("å" . 'dired-filter-group-mode)
+#+END_SRC
+
+- Filter Groups
+#+BEGIN_SRC emacs-lisp :tangle no :noweb-ref dired-filter-custom
+  (dired-filter-group-saved-groups
+   '(("Default"
+      ("PDF"
+       (extension . "pdf"))
+      ("LaTeX"
+       (extension "tex" "bib"))
+      ("Org"
+       (extension . "org"))
+      ("Archives"
+       (extension "zip" "rar" "tar" "gz" "bz2")))))
+#+END_SRC
+* PDF-tools
+#+BEGIN_SRC emacs-lisp
+(use-package pdf-tools)
+#+END_SRC
+* Org-Mode
+Org mode is the basis of this config. It should be properly set up.
+** Installation
+  #+BEGIN_SRC emacs-lisp :noweb yes
+    (use-package org
+      :straight org-plus-contrib
+      ;;:bind
+      ;;<<org-mode-keybinds>>
+      :custom
+      <<org-mode-custom>>
+      ;;:hook
+      ;;<<org-mode-hooks>
+      :config
+      <<org-mode-config>>)
+#+END_SRC
+** General configuration
+- Startup settings
+#+BEGIN_SRC emacs-lisp :noweb-ref org-mode-custom :tangle no
+  (org-startup-indented t)
+  (org-startup-folded 'overview)
+#+END_SRC
+- Directory
+#+BEGIN_SRC emacs-lisp :noweb-ref org-mode-custom :tangle no
+  (org-directory "~/Org")
+#+END_SRC
+** Babel
+Set the languages
+#+BEGIN_SRC emacs-lisp :noweb-ref org-mode-config :tangle no
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '((ruby . t)
+     (latex . t)
+     (python . t)
+     (shell . t)
+     (calc . t)
+     (haskell . t)))
+#+END_SRC
+Ignore eval-confirmations
+#+BEGIN_SRC emacs-lisp :noweb-ref org-mode-custom :tangle no
+(org-confirm-babel-evaluate nil)
+#+END_SRC
+Native fonts
+#+BEGIN_SRC emacs-lisp :noweb-ref org-mode-custom :tangle no
+(org-src-fontify-natively t)
+#+END_SRC
+** Prettifying Org-mode
+- Pretty fold-symbol
+#+BEGIN_SRC emacs-lisp :noweb-ref org-mode-custom :tangle no
+  (org-ellipsis " ▼")
+#+END_SRC
+- Misc
+#+BEGIN_SRC emacs-lisp :noweb-ref org-mode-custom :tangle no
+  (org-fontify-done-headline t)
+  (org-fontify-quote-and-verse-blocks t)
+  (org-pretty-entitles t)
+  (org-support-shift-select t)
+  (org-confirm-babel-evaluate nil)
+#+END_SRC
+Prettier bullets
+#+BEGIN_SRC emacs-lisp
+  (use-package org-bullets
+    :after org
+    :hook
+    (org-mode . (lambda () (org-bullets-mode 1))))
+#+END_SRC
+Latex Fragments
+Render =$a^2$= as $a^2$
+#+begin_src emacs-lisp :tangle yes
+  (use-package org-fragtog
+    :after org
+    :config
+    (setq org-format-latex-options
+          (plist-put org-format-latex-options :scale 1.8))
+    :hook
+    (org-mode . org-fragtog-mode)
+    )
+#+end_src
+** Org-Roam
+#+begin_src emacs-lisp :tangle yes
+  (use-package org-roam
+	       :after org
+	       :config
+	       (setq org-roam-directory "~/Org/roam")
+	       (add-hook 'after-init-hook 'org-roam-mode))
+#+end_src
+** TODO Org-Exports
+*** LaTeX
+Latex Exporter
+#+begin_src emacs-lisp
+  (with-eval-after-load 'ox-latex
+#+end_src
+Syntax Highlighting for code
+#+begin_src emacs-lisp :tangle yes
+  (add-to-list 'org-latex-packages-alist '("cache=false" "minted"))
+  (setq org-latex-listings 'minted)
+#+end_src
+Org-latex with bibtex
+#+begin_src emacs-lisp :tangle yes
+    (setq org-latex-compiler "xelatex")
+    (setq org-latex-pdf-process
+          (list "latexmk -pdflatex='xelatex -shell-escape -synctex=1' -bibtex -pdf -f %f"))
+#+end_src
+LaTeX classes
+#+begin_src emacs-lisp :tangle yes
+     (add-to-list 'org-latex-classes
+                  '("beamer"
+                    "\\documentclass\[presentation\]\{beamer\}\n\\usetheme\{CambridgeUS\}\n\\usecolortheme\{orchid\}"
+                    ("\\section\{%s\}" . "\\section*\{%s\}")
+                    ("\\subsection\{%s\}" . "\\subsection*\{%s\}")
+                    ("\\subsubsection\{%s\}" . "\\subsubsection*\{%s\}")))
+#+end_src
+Close LaTeX =with-eval-after-load=
+#+begin_src emacs-lisp :tangle yes
+)
+#+end_src
+** References
+#+begin_src emacs-lisp
+  (use-package org-ref
+    :after org
+    :custom
+    (reftex-default-bibliography '("~/Org/bib/references.bib"))
+    (org-ref-bibliography-notes "~/Org/bib/notes.org")
+    (org-ref-default-bibliography '("~/Org/bib/references.bib"))
+    (org-ref-pdf-directory "~/Org/bib/bibtex-pdfs/"))
+#+end_src
+** Org-Download
+#+begin_src emacs-lisp
+  (use-package org-download
+	       :after org)
+#+end_src
+** GnuPlot
+#+begin_src emacs-lisp :tangle yes
+  (use-package gnuplot
+	       :after org)
+#+end_src
+* Ivy
+#+BEGIN_SRC emacs-lisp :noweb yes
+  (use-package counsel)
+  (use-package ivy
+    :demand t
+    :delight
+    :config
+    (ivy-mode t)
+    :custom
+    <<ivy-custom>>
+    :bind
+    <<ivy-bindings>>
+    )
+#+END_SRC
+** Custom
+#+BEGIN_SRC emacs-lisp :noweb-ref ivy-custom :tangle no
+ivy-use-virtual-buffers t
+enable-recursive-minibuffers t
+#+END_SRC
+
+** Binds
+#+BEGIN_SRC emacs-lisp :noweb-ref ivy-bindings :tangle no
+  ("C-s" . 'swiper)
+  ("M-x" . 'counsel-M-x)
+  ("C-x C-f" . 'counsel-find-file)
+  ("C-x b" . 'counsel-switch-buffer)
+  ("C-x C-b" . 'counsel-switch-buffer-other-window)
+#+END_SRC
+* Which-key
+#+BEGIN_SRC emacs-lisp
+  (use-package which-key
+    :init
+    (setq which-key-enable-extended-define-key t)
+    :config
+    (which-key-mode))
+#+END_SRC
+
+* Auto-completion
+We use ~company~ for auto-completion.
+#+BEGIN_SRC emacs-lisp :noweb yes
+  (use-package company
+    :diminish company-mode
+    :config
+    (add-hook 'after-init-hook 'global-company-mode)
+    :custom
+    <<company-mode-custom>>)
+
+  (use-package company-quickhelp
+    :after company
+    :config
+    (company-quickhelp-mode))
+#+END_SRC
+
+- Show popups
+#+BEGIN_SRC emacs-lisp :noweb-ref company-mode-custom :tangle no
+(company-idle-delay 0.0)
+(company-minimum-prefix-length 2)
+#+END_SRC
+- No numbers
+#+BEGIN_SRC emacs-lisp :noweb-ref company-mode-custom :tangle no
+(company-show-numbers nil)
+#+END_SRC
+- Don't force match
+#+BEGIN_SRC emacs-lisp :noweb-ref company-mode-custom :tangle no
+  (company-require-match nil)
+#+END_SRC
+- Align annotations
+  #+BEGIN_SRC emacs-lisp :tangle no :noweb-ref company-mode-custom
+  (company-tooltip-align-annotations t)
+  #+END_SRC
+- Global Mode
+  #+BEGIN_SRC emacs-lisp :tangle no :noweb-ref company-mode-custom
+  (global-company-mode t)
+  #+END_SRC
+** Company-box
+A prettier frontend
+#+BEGIN_SRC emacs-lisp
+  (use-package company-box :after company
+    :hook (company-mode . company-box-mode))
+#+END_SRC
+* Syntax Checking
+#+BEGIN_SRC emacs-lisp
+  (use-package flycheck
+    :hook (prog-mode . flycheck-mode))
+#+END_SRC
+* YAsnippet
+#+BEGIN_SRC emacs-lisp
+  ;; * Test Mode
+  (use-package yasnippet
+    :config
+    (yas-global-mode 1)
+    :bind (:map yas-minor-mode-map
+                ("TAB" . nil)
+                ("<tab>" . nil)
+                ("M-§" . 'yas-expand)))
+  (use-package yasnippet-snippets)
+#+END_SRC
+* Language Server Protocol
+#+begin_src emacs-lisp
+(global-unset-key "\C-l")
+#+end_src
+#+BEGIN_SRC emacs-lisp
+  (use-package lsp-mode
+    :straight (lsp-mode :type git :host github :repo "emacs-lsp/lsp-mode")
+    :init (setq lsp-keymap-prefix "C-l")
+    :hook (
+    (lsp-mode . lsp-enable-which-key-integration))
+    :custom
+    (lsp-use-native-json 't)
+    :commands lsp)
+  (use-package lsp-ui :commands lsp-ui-mode)
+  (use-package company-lsp :commands company-lsp)
+  (use-package lsp-ivy :commands lsp-ivy-workspace-symbol)
+#+END_SRC
+* Languages
+** Promela
+#+begin_src emacs-lisp :tangle yes
+        (use-package promela-mode
+          :straight(promela-mode
+                    :type git
+                    :host github
+                    :repo "rudi/promela-mode"))
+#+end_src
+** Erlang
+#+begin_src emacs-lisp :tangle yes
+(use-package erlang)
+#+end_src
+** GDScript
+#+begin_src emacs-lisp :tangle yes
+  (use-package gdscript-mode
+      :straight (gdscript-mode
+                 :type git
+                 :host github
+                 :repo "GDQuest/emacs-gdscript-mode")
+      :hook
+      (gdscript-mode . lsp))
+#+end_src
+** Nix
+#+begin_src emacs-lisp :tangle yes
+  (use-package nix-mode
+    :bind ("C-." . 'nix-update-fetch))
+  (use-package nix-update)
+#+end_src
+** Web (JS/HTML)
+#+begin_src emacs-lisp
+  (use-package web-mode
+    :config
+    (add-to-list 'auto-mode-alist '("\\.html?\\'" . web-mode)))
+#+end_src
+** ANTLR
+#+begin_src emacs-lisp
+(use-package antlr-mode)
+#+end_src
+** Lisp
+#+begin_src emacs-lisp
+  (use-package slime)
+#+end_src
+** Proof General
+Disabled
+#+BEGIN_SRC emacs-lisp
+  (use-package proof-general)
+  (use-package company-coq
+    :after proof-general
+    :hook
+    (coq-mode . company-coq-mode))
+
+#+END_SRC
+** Lua
+#+BEGIN_SRC emacs-lisp
+(use-package lua-mode)
+#+END_SRC
+
+** LaTeX
+   #+BEGIN_SRC emacs-lisp
+     (use-package tex-site
+       :straight auctex
+       :config
+       (setq TeX-command-default "XeLaTeX"
+             TeX-save-query nil)
+       ;;:bind ("C-'" . lagda-toggle-mode)
+       )
+   #+END_SRC
+Okular reader
+   #+begin_src emacs-lisp
+     (setq TeX-source-correlate-method 'synctex
+           TeX-source-correlate-mode t
+           TeX-source-correlate-start-server t
+           TeX-view-program-list '(("Okular" "okular --unique %o#src:%n%b"))
+           TeX-view-program-selection '((output-pdf "Okular")))
+
+
+   #+end_src
+** Agda
+:PROPERTIES:
+:header-args: :tangle functions.el
+:END:
+
+#+begin_src emacs-lisp :tangle no :noweb-ref exec-path-init
+  (cfg/init-agda)
+#+end_src
+
+#+BEGIN_SRC emacs-lisp
+  (defun cfg/init-agda ()
+    (when (locate-file "agda-mode" exec-path)
+      (load-file (let ((coding-system-for-read 'utf-8))
+                   (shell-command-to-string "agda-mode locate")))
+      (add-to-list 'exec-path (let ((coding-system-for-read 'utf-8))
+                                (file-name-directory (shell-command-to-string "which agda"))))
+#+END_SRC
+
+Fix colors
+
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'agda2-mode-hook
+            (lambda ()
+              (progn
+                (set-face-attribute 'agda2-highlight-bound-variable-face nil
+                                    :foreground (face-attribute 'font-lock-variable-name-face :foreground)
+                                    :slant 'italic)
+
+                (set-face-attribute 'agda2-highlight-inductive-constructor-face nil
+                                    :foreground (face-attribute 'font-lock-constant-face :foreground))
+
+                (set-face-attribute 'agda2-highlight-datatype-face nil
+                                    :foreground (face-attribute 'font-lock-type-face :foreground))
+
+                (set-face-attribute 'agda2-highlight-catchall-clause-face nil
+                                    :background nil
+                                    :overline nil)
+
+                (set-face-attribute 'agda2-highlight-function-face nil
+                                    :foreground (face-attribute 'font-lock-function-name-face :foreground))
+
+                (set-face-attribute 'agda2-highlight-keyword-face nil
+                                    :foreground (face-attribute 'font-lock-keyword-face :foreground))
+
+                (set-face-attribute 'agda2-highlight-module-face nil
+                                    :foreground (face-attribute 'font-lock-builtin-face :foreground))
+                (set-face-attribute 'agda2-highlight-primitive-type-face nil
+                                    :foreground (face-attribute 'font-lock-builtin-face :foreground)
+                                    :bold t)
+
+                (set-face-attribute 'agda2-highlight-symbol-face nil
+                                    :foreground (face-attribute 'font-lock-comment-face :foreground))))))
+#+END_SRC
+
+
+Org Highlight
+#+BEGIN_SRC emacs-lisp
+  (add-to-list 'org-src-lang-modes '("agda" . ob-agda)))
+#+END_SRC
+** Minizinc
+#+BEGIN_SRC emacs-lisp
+  (use-package minizinc-mode
+    :config
+    (add-to-list 'auto-mode-alist '("\\.mzn\\'" . minizinc-mode)))
+#+END_SRC
+** C/C++
+   #+BEGIN_SRC emacs-lisp
+     (use-package cquery
+     :hook
+     (c-mode . lsp)
+     (c++-mode . lsp))
+     (setq cquery-executable (s-trim (shell-command-to-string "which cquery")))
+   #+END_SRC
+
+   Requires AUR-package installation!
+#+BEGIN_SRC shell :tangle no :noweb-ref aur
+cquery-git
+#+END_SRC
+** Rust
+#+BEGIN_SRC emacs-lisp
+  (use-package rust-mode
+    :config
+    (setq lsp-rust-server 'rust-analyzer)
+    :hook
+    (rust-mode . lsp))
+  (use-package cargo
+    :hook
+    (rust-mode . cargo-minor-mode))
+
+#+END_SRC
+RON (Rusty Object Notation)
+#+begin_src emacs-lisp
+  (use-package ron-mode
+    :straight (ron-mode :type git :host github :repo "hoyon/ron-mode"))
+#+end_src
+
+#+RESULTS:
+
+** JavaScript
+#+begin_src emacs-lisp
+  (use-package js2-mode)
+  (use-package json-mode)
+#+end_src
+** Haskell
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package haskell-mode)
+  (use-package lsp-haskell
+    :hook
+    (haskell-mode . lsp)
+    :config
+
+    (define-key haskell-mode-map (kbd "C-c C-l") 'haskell-process-load-or-reload)
+    (define-key haskell-mode-map (kbd "C-´") 'haskell-interactive-bring)
+    (define-key haskell-mode-map (kbd "C-c C-t") 'haskell-process-do-type)
+    (define-key haskell-mode-map (kbd "C-c C-i") 'haskell-process-do-info)
+    (define-key haskell-mode-map (kbd "C-c C-c") 'haskell-process-cabal-build)
+    (define-key haskell-mode-map (kbd "C-c C-k") 'haskell-interactive-mode-clear)
+    (define-key haskell-mode-map (kbd "C-c c") 'haskell-process-cabal))
+#+END_SRC
+** Python
+#+BEGIN_SRC emacs-lisp
+
+#+END_SRC
+** YAML
+#+begin_src emacs-lisp :tangle yes
+(use-package yaml-mode)
+#+end_src
+* Eshell
+#+begin_src emacs-lisp :tangle functions.el
+  (defun cfg/configure-eshell ()
+    (add-hook 'eshell-pre-command-hook 'eshell-save-some-history)
+    (add-to-list 'eshell-output-filter-functions 'eshell-truncate-buffer)
+    (setq eshell-history-size 10000
+          eshell-buffer-maximum-lines 10000
+          eshell-hist-ignoredups t
+          eshell-scroll-to-bottom-on-input t))
+
+  (use-package eshell-git-prompt
+    :after eshell
+    :config
+    (eshell-git-prompt-use-theme 'powerline))
+
+  (use-package eshell
+    :straight
+    :hook (eshell-first-time-mode . cfg/configure-eshell))
+
+  (with-eval-after-load 'esh-opt
+    (setq eshell-destroy-buffer-when-process-dies t
+          eshell-visual-commands '("top" "zsh" "vim")))
+#+end_src
+* Compilation
+Auto-close window
+#+begin_src emacs-lisp :tangle functions.el
+  (defun bury-compile-buffer-if-successful (buffer string)
+    "Bury a compilation buffer if succeeded without warnings "
+    (if (and
+         (string-match "compilation" (buffer-name buffer))
+         (string-match "finished" string)
+         (not
+          (with-current-buffer buffer
+            ,**(goto-char 1)**
+            (search-forward "warning" nil t))))
+        (run-with-timer 1 nil
+                        (lambda (buf)
+                          (bury-buffer buf)
+                          (switch-to-prev-buffer (get-buffer-window buf) 'kill))
+                        buffer)))
+#+end_src
+#+begin_src emacs-lisp :tangle yes
+  (add-hook 'compilation-finish-functions 'bury-compile-buffer-if-successful)
+#+end_src
+* Keybindings
+#+begin_src emacs-lisp :tangle yes
+  (use-package general
+    :config
+    (general-create-definer leader-key
+      :prefix "C-å")
+    (leader-key
+      "+" 'hydra-zoom/body
+      "t" '(:ignore t :which-key "toggles")
+      "tl" '(linum-mode :which-key "line numbers")
+      "c" 'compile
+      "e" 'eshell
+      "r" '(:ignore t :which-key "org-roam")
+      "rc" 'org-roam-capture
+      "rl" 'org-roam-link
+      "rf" 'org-roam-find-ref
+      "ro" 'org-roam-find-file
+      "ri" 'org-roam-insert
+      "rr" 'org-roam
+      )
+    )
+#+end_src
+* Theming
+** Font
+#+begin_src emacs-lisp :tangle yes
+(set-face-attribute 'default nil :font "Hack" :height 150)
+#+end_src
+** Icons
+#+begin_src emacs-lisp
+  (use-package all-the-icons)
+  (use-package all-the-icons-dired
+    :after all-the-icons
+    :hook
+    (dired-mode . all-the-icons-dired-mode))
+#+end_src
+** Theme
+#+begin_src emacs-lisp
+  (use-package doom-themes
+    :config
+    (setq doom-themes-enable-bold t
+          doom-themes-enable-italic t)
+    (load-theme 'doom-snazzy t)
+    (doom-themes-visual-bell-config)
+    (doom-themes-org-config))
+#+end_src
+** Modeline
+#+begin_src emacs-lisp
+  (use-package doom-modeline
+    :after all-the-icons
+    :hook (after-init . doom-modeline-mode)
+    :config
+    (setq doom-modeline-icon t
+          doom-modeline-major-mode-color-icon t))
+#+end_src
